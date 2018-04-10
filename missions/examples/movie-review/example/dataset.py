@@ -45,7 +45,9 @@ class MovieReviewDataset(Dataset):
 
         # 영화리뷰 데이터를 읽고 preprocess까지 진행합니다
         with open(data_review, 'rt', encoding='utf-8') as f:
-            self.reviews, self.token_list = preprocess(f.readlines(), max_length)
+            self.input1, self.input2, self.token_list = preprocess(f.readlines(), max_length)
+        
+        self.data = np.concatenate([self.input1, self.input2], axis=1)
         # 영화리뷰 레이블을 읽고 preprocess까지 진행합니다.
         with open(data_label) as f:
             self.labels = [np.float32(x) for x in f.readlines()]
@@ -55,7 +57,7 @@ class MovieReviewDataset(Dataset):
 
         :return: 전체 데이터의 수를 리턴합니다
         """
-        return len(self.reviews)
+        return len(self.labels)
 
     def __getitem__(self, idx):
         """
@@ -63,7 +65,7 @@ class MovieReviewDataset(Dataset):
         :param idx: 필요한 데이터의 인덱스
         :return: 인덱스에 맞는 데이터, 레이블 pair를 리턴합니다
         """
-        return self.reviews[idx], self.labels[idx]
+        return self.data[idx], self.labels[idx]
 
 from kor_char_parser import create_ngram
 from collections import Counter
@@ -71,6 +73,8 @@ from functools import reduce
 
 def preprocess(data: list, max_length: int, token_list=None):
     MAX_TOKEN = 4096
+
+    # input1
 
     if not token_list:
         counter = Counter()
@@ -80,8 +84,11 @@ def preprocess(data: list, max_length: int, token_list=None):
 
     token_dict = {token: i for i, token in enumerate(token_list)}
     
-    zero_padding = np.zeros((len(data), max_length), dtype=np.int32)
+    zero_padding1 = np.zeros((len(data), max_length), dtype=np.int32)
+    zero_padding2 = np.zeros((len(data), 257), dtype=np.int32)
+
     for idx, datum in enumerate(data):
+        # input 1
         tokens = create_ngram(datum, warning=False)
         temp_list = list()
         for token in tokens:
@@ -90,8 +97,14 @@ def preprocess(data: list, max_length: int, token_list=None):
 
         length = len(temp_list)
         if length >= max_length:
-            zero_padding[idx, :max_length] = np.array(temp_list)[:max_length]
+            zero_padding1[idx, :max_length] = np.array(temp_list)[:max_length]
         else:
-            zero_padding[idx, :length] = np.array(temp_list)
-        
-    return zero_padding, token_list
+            zero_padding1[idx, :length] = np.array(temp_list)
+
+        # input2
+        counter = Counter(decompose_str_as_one_hot(datum, warning=False))
+        for i in range(256):
+            zero_padding2[idx, i] = counter[i]
+        zero_padding2[idx, 256] = len(datum)
+
+    return zero_padding1, zero_padding2, token_list

@@ -63,10 +63,10 @@ def bind_model(model, config):
         """
         # dataset.py에서 작성한 preprocess 함수를 호출하여, 문자열을 벡터로 변환합니다
         global token_list
-        preprocessed_data, _ = preprocess(raw_data, config.strmaxlen, token_list=token_list or 1)
+        input1, input2, _ = preprocess(raw_data, config.strmaxlen, token_list=token_list or 1)
 
         # 저장한 모델에 입력값을 넣고 prediction 결과를 리턴받습니다
-        output_prediction = model.predict(preprocessed_data)
+        output_prediction = model.predict([input1, input2])
         point = output_prediction.flatten().tolist()
         # DONOTCHANGE: They are reserved for nsml
         # 리턴 결과는 [(confidence interval, 포인트)] 의 형태로 보내야만 리더보드에 올릴 수 있습니다. 리더보드 결과에 confidence interval의 값은 영향을 미치지 않습니다
@@ -93,11 +93,12 @@ def collate_fn(data: list):
     # 각각 데이터, 레이블을 리턴
     return review, np.array(label)
 
-from keras.models import Sequential
-from keras.layers import Embedding, Flatten, Dense, GRU
+from keras.models import Sequential, Model, Input
+from keras.layers import Embedding, Flatten, Dense, GRU, concatenate
 from keras.optimizers import Adam
 
 if __name__ == '__main__':
+    print('Start!')
     args = argparse.ArgumentParser()
     # DONOTCHANGE: They are reserved for nsml
     args.add_argument('--mode', type=str, default='train')
@@ -115,13 +116,24 @@ if __name__ == '__main__':
     if not HAS_DATASET and not IS_ON_NSML:  # It is not running on nsml
         DATASET_PATH = '../sample_data/movie_review/'
 
-    model = Sequential()
-    model.add(Embedding(4096, 64, input_length=config.strmaxlen))
-    model.add(GRU(256, return_sequences=True))
-    model.add(GRU(256, go_backwards=True))
-    model.add(Dense(256))
-    model.add(Dense(1))
+    def create_model():
+        input1 = Input(shape=(config.strmaxlen,))
 
+        x1 = Embedding(4096, 128, input_length=config.strmaxlen)(input1)
+        x1 = GRU(128, return_sequences=True)(x1)
+        x1 = GRU(128, return_sequences=True, go_backwards=True)(x1)
+        x1 = GRU(128)(x1)
+        x1 = Dense(128)(x1)
+
+        input2 = Input(shape=(257,))
+        
+        x = concatenate([x1, input2])
+        x = Dense(256)(x)
+        x = Dense(1)(x)
+
+        return Model(inputs=[input1, input2], outputs=x)
+
+    model = create_model()
     model.compile(
         loss='mse',
         optimizer=Adam(0.001),
@@ -154,10 +166,14 @@ if __name__ == '__main__':
         for epoch in range(config.epochs):
             avg_loss = 0.0
             for i, (data, labels) in enumerate(train_loader):
-                data = np.matrix(data).reshape([-1, config.strmaxlen])
+
+                data = np.matrix(data).reshape([len(data), -1])
+                input1 = data[:,:config.strmaxlen]
+                input2 = data[:,config.strmaxlen:]
+
                 labels = np.array(labels)
 
-                loss = model.train_on_batch(data, labels)
+                loss = model.train_on_batch([input1, input2], labels)
 
                 print('Batch : ', i + 1, '/', total_batch,
                       ', MSE in this minibatch: ', loss)
