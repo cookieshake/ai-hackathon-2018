@@ -106,3 +106,29 @@ def decompose_str_as_one_hot(string, warning=True):
         da = decompose_as_one_hot(ord(x), warning=warning)
         tmp_list.extend(da)
     return tmp_list
+
+from konlpy.tag import Komoran
+komoran = Komoran()
+def decompose_str_with_token(string, warning=True):
+    return [token[0] for token in komoran.pos(string)]
+
+from itertools import islice
+def window(seq, n=2):
+    "Returns a sliding window (of width n) over data from the iterable"
+    "   s -> (s0,s1,...s[n-1]), (s1,s2,...,sn), ...                   "
+    it = iter(seq)
+    result = tuple(islice(it, n))
+    if len(result) == n:
+        yield ''.join(result)
+    for elem in it:
+        result = result[1:] + (elem,)
+        yield ''.join(result)
+
+def create_ngram(string, warning=True):
+    string = string.replace(' ', '')
+    gram2 = list(window(string))
+    gram3 = list(window(string, n=3))
+
+    gram2.extend(gram3)
+    return gram2
+    

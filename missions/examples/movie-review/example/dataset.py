@@ -45,7 +45,7 @@ class MovieReviewDataset(Dataset):
 
         # 영화리뷰 데이터를 읽고 preprocess까지 진행합니다
         with open(data_review, 'rt', encoding='utf-8') as f:
-            self.reviews = preprocess(f.readlines(), max_length)
+            self.reviews, self.token_list = preprocess(f.readlines(), max_length)
         # 영화리뷰 레이블을 읽고 preprocess까지 진행합니다.
         with open(data_label) as f:
             self.labels = [np.float32(x) for x in f.readlines()]
@@ -65,24 +65,33 @@ class MovieReviewDataset(Dataset):
         """
         return self.reviews[idx], self.labels[idx]
 
+from kor_char_parser import create_ngram
+from collections import Counter
+from functools import reduce
 
-def preprocess(data: list, max_length: int):
-    """
-     입력을 받아서 딥러닝 모델이 학습 가능한 포맷으로 변경하는 함수입니다.
-     기본 제공 알고리즘은 char2vec이며, 기본 모델이 MLP이기 때문에, 입력 값의 크기를 모두 고정한 벡터를 리턴합니다.
-     문자열의 길이가 고정값보다 길면 긴 부분을 제거하고, 짧으면 0으로 채웁니다.
+def preprocess(data: list, max_length: int, token_list=None):
+    MAX_TOKEN = 2048
 
-    :param data: 문자열 리스트 ([문자열1, 문자열2, ...])
-    :param max_length: 문자열의 최대 길이
-    :return: 벡터 리스트 ([[0, 1, 5, 6], [5, 4, 10, 200], ...]) max_length가 4일 때
-    """
-    vectorized_data = [decompose_str_as_one_hot(datum, warning=False) for datum in data]
+    if not token_list:
+        counter = Counter()
+        for datum in data:
+            counter.update(create_ngram(datum, warning=False))
+        token_list = [token for token, count in counter.most_common(MAX_TOKEN)]
+
+    token_dict = {token: i for i, token in enumerate(token_list)}
+    
     zero_padding = np.zeros((len(data), max_length), dtype=np.int32)
-    for idx, seq in enumerate(vectorized_data):
-        length = len(seq)
+    for idx, datum in enumerate(data):
+        tokens = create_ngram(datum, warning=False)
+        temp_list = list()
+        for token in tokens:
+            if token in token_dict:
+                temp_list.append(token_dict[token])
+
+        length = len(temp_list)
         if length >= max_length:
-            length = max_length
-            zero_padding[idx, :length] = np.array(seq)[:length]
+            zero_padding[idx, :max_length] = np.array(temp_list)[:max_length]
         else:
-            zero_padding[idx, :length] = np.array(seq)
-    return zero_padding
+            zero_padding[idx, :length] = np.array(temp_list)
+        
+    return zero_padding, token_list

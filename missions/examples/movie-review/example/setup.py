@@ -1,4 +1,4 @@
-#nsml: floydhub/pytorch:0.3.0-gpu.cuda8cudnn6-py3.17
+#nsml: floydhub/tensorflow:1.7.0-gpu.cuda9cudnn7-py3_aws.25
 
 """
 Copyright 2018 NAVER Corp.
@@ -26,5 +26,6 @@ setup(
     version='1.0',
     description='',
     install_requires=[
+        'konlpy', 'jpype1', 'torch', 'torchvision'
     ]
 )
