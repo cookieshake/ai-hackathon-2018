@@ -70,7 +70,7 @@ from collections import Counter
 from functools import reduce
 
 def preprocess(data: list, max_length: int, token_list=None):
-    MAX_TOKEN = 2048
+    MAX_TOKEN = 4096
 
     if not token_list:
         counter = Counter()

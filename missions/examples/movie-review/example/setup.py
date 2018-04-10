@@ -1,4 +1,4 @@
-#nsml: floydhub/tensorflow:1.7.0-gpu.cuda9cudnn7-py3_aws.25
+#nsml: floydhub/tensorflow:1.5.0-gpu.cuda8cudnn6-py3_aws.22
 
 """
 Copyright 2018 NAVER Corp.

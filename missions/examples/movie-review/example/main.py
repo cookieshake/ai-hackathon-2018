@@ -94,7 +94,8 @@ def collate_fn(data: list):
     return review, np.array(label)
 
 from keras.models import Sequential
-from keras.layers import Embedding, Flatten, Dense
+from keras.layers import Embedding, Flatten, Dense, GRU
+from keras.optimizers import Adam
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
@@ -115,14 +116,15 @@ if __name__ == '__main__':
         DATASET_PATH = '../sample_data/movie_review/'
 
     model = Sequential()
-    model.add(Embedding(2048, 64, input_length=config.strmaxlen))
-    model.add(Flatten())
+    model.add(Embedding(4096, 64, input_length=config.strmaxlen))
+    model.add(GRU(256, return_sequences=True))
+    model.add(GRU(256, go_backwards=True))
     model.add(Dense(256))
     model.add(Dense(1))
 
     model.compile(
         loss='mse',
-        optimizer='adam',
+        optimizer=Adam(0.001),
         metrics=[]
     )
 

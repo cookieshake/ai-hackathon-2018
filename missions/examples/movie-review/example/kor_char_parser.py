@@ -128,7 +128,9 @@ def create_ngram(string, warning=True):
     string = string.replace(' ', '')
     gram2 = list(window(string))
     gram3 = list(window(string, n=3))
+    gram4 = list(window(string, n=4))
 
     gram2.extend(gram3)
+    gram2.extend(gram4)
     return gram2
     
