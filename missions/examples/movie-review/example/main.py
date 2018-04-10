@@ -94,8 +94,9 @@ def collate_fn(data: list):
     return review, np.array(label)
 
 from keras.models import Sequential, Model, Input
-from keras.layers import Embedding, Flatten, Dense, GRU, concatenate
+from keras.layers import Embedding, Flatten, Dense, GRU, concatenate, AlphaDropout, Lambda
 from keras.optimizers import Adam
+from keras import backend as K
 
 if __name__ == '__main__':
     print('Start!')
@@ -119,17 +120,25 @@ if __name__ == '__main__':
     def create_model():
         input1 = Input(shape=(config.strmaxlen,))
 
+        acti_init = {
+            'activation': 'selu',
+            'kernel_initializer': 'lecun_normal'
+        }
+
         x1 = Embedding(4096, 128, input_length=config.strmaxlen)(input1)
-        x1 = GRU(128, return_sequences=True)(x1)
-        x1 = GRU(128, return_sequences=True, go_backwards=True)(x1)
-        x1 = GRU(128)(x1)
-        x1 = Dense(128)(x1)
+        x1 = GRU(128, return_sequences=True, dropout=0.2)(x1)
+        x1 = GRU(128, return_sequences=True, go_backwards=True, dropout=0.2)(x1)
+        x1 = GRU(128, dropout=0.2)(x1)
+        x1 = Dense(128, **acti_init)(x1)
+        x1 = AlphaDropout(0.2)(x1)
 
         input2 = Input(shape=(257,))
         
         x = concatenate([x1, input2])
-        x = Dense(256)(x)
-        x = Dense(1)(x)
+        x = Dense(256, **acti_init)(x)
+        x = AlphaDropout(0.2)(x)
+        x = Dense(1, activation='sigmoid')(x)
+        x = Lambda(lambda x: x * 9 + 1)(x)
 
         return Model(inputs=[input1, input2], outputs=x)
 
