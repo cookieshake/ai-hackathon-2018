@@ -97,6 +97,7 @@ from keras.models import Sequential, Model, Input
 from keras.layers import Embedding, Flatten, Dense, GRU, concatenate, AlphaDropout, Lambda
 from keras.optimizers import Adam
 from keras import backend as K
+from keras.callbacks import LambdaCallback
 
 if __name__ == '__main__':
     print('Start!')
@@ -126,23 +127,23 @@ if __name__ == '__main__':
 
         input1 = Input(shape=(config.strmaxlen,))
 
-        x1 = Embedding(2048, 128, input_length=config.strmaxlen)(input1)
-        x1 = GRU(128, return_sequences=True, dropout=dropout_rate)(x1)
-        x1 = GRU(128, return_sequences=True, go_backwards=True, dropout=dropout_rate)(x1)
-        x1 = GRU(128, dropout=dropout_rate)(x1)
-        x1 = Dense(128, **acti_init)(x1)
+        x1 = Embedding(4096, 64, input_length=config.strmaxlen)(input1)
+        x1 = GRU(64, return_sequences=True, dropout=dropout_rate)(x1)
+        x1 = GRU(64, return_sequences=True, go_backwards=True, dropout=dropout_rate)(x1)
+        x1 = GRU(64, dropout=dropout_rate)(x1)
+        x1 = Dense(64, **acti_init)(x1)
         x1 = AlphaDropout(dropout_rate)(x1)
 
-        input2 = Input(shape=(1 + 256 + 2048,))
-        x2 = Dense(512, **acti_init)(input2)
+        input2 = Input(shape=(1 + 256 + 4096,))
+        x2 = Dense(256, **acti_init)(input2)
         x2 = AlphaDropout(dropout_rate)(x2)
         x2 = Dense(256, **acti_init)(input2)
         x2 = AlphaDropout(dropout_rate)(x2)
-        x2 = Dense(128, **acti_init)(x2)
+        x2 = Dense(64, **acti_init)(x2)
         x2 = AlphaDropout(dropout_rate)(x2)
         
         x = concatenate([x1, x2])
-        x = Dense(256, **acti_init)(x)
+        x = Dense(128, **acti_init)(x)
         x = AlphaDropout(dropout_rate)(x)
         x = Dense(1, activation='sigmoid')(x)
         x = Lambda(lambda x: x * 9 + 1)(x)
@@ -152,7 +153,7 @@ if __name__ == '__main__':
     model = create_model()
     model.compile(
         loss='mse',
-        optimizer=Adam(0.001),
+        optimizer=Adam(0.0003),
         metrics=[]
     )
     model.summary()
@@ -171,37 +172,34 @@ if __name__ == '__main__':
         print("Now Loading Dataset...")
         dataset = MovieReviewDataset(DATASET_PATH, config.strmaxlen)
         token_list = dataset.token_list
-        print("Now Creating Loader...")
-        train_loader = DataLoader(dataset=dataset,
-                                  batch_size=config.batch,
-                                  shuffle=True,
-                                  collate_fn=collate_fn,
-                                  num_workers=2)
         print("Loading Dataset Done")
-        total_batch = len(train_loader)
-        # epoch마다 학습을 수행합니다.
-        for epoch in range(config.epochs):
-            avg_loss = 0.0
-            for i, (data, labels) in enumerate(train_loader):
 
-                data = np.matrix(data).reshape([len(data), -1])
-                input1 = data[:,:config.strmaxlen]
-                input2 = data[:,config.strmaxlen:]
+        batches_per_epoch = int(len(dataset.labels) / config.batch) + 1
 
-                labels = np.array(labels)
-
-                loss = model.train_on_batch([input1, input2], labels)
-
-                print('Batch : ', i + 1, '/', total_batch,
-                      ', MSE in this minibatch: ', loss)
-                avg_loss += loss
-            print('epoch:', epoch, ' train_loss:', float(avg_loss/total_batch))
+        # 학습을 수행합니다.
+        def on_epoch_end(epoch, logs):
             # nsml ps, 혹은 웹 상의 텐서보드에 나타나는 값을 리포트하는 함수입니다.
-            #
             nsml.report(summary=True, scope=locals(), epoch=epoch, epoch_total=config.epochs,
-                        train__loss=float(avg_loss/total_batch), step=epoch)
+                        train__loss=logs['loss'], step=epoch)
             # DONOTCHANGE (You can decide how often you want to save the model)
             nsml.save(epoch)
+
+        def on_batch_end(batch, logs):
+            if batch % 50 == 1 or batch == batches_per_epoch:
+                print("Batch: {}/{}, Loss: {}".format(batch, batches_per_epoch, logs['loss']))
+
+
+        callback = LambdaCallback(on_epoch_end=on_epoch_end, on_batch_end=on_batch_end)
+        model.fit(
+            x=[dataset.input1, dataset.input2],
+            y=dataset.labels, 
+            batch_size=config.batch,
+            epochs=config.epochs,
+            verbose=2,
+            callbacks=[callback],
+            validation_split=0.1,
+            shuffle=True,
+        )
 
     # 로컬 테스트 모드일때 사용합니다
     # 결과가 아래와 같이 나온다면, nsml submit을 통해서 제출할 수 있습니다.
