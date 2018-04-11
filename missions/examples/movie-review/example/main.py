@@ -118,25 +118,32 @@ if __name__ == '__main__':
         DATASET_PATH = '../sample_data/movie_review/'
 
     def create_model():
-        input1 = Input(shape=(config.strmaxlen,))
-
         acti_init = {
             'activation': 'selu',
             'kernel_initializer': 'lecun_normal'
         }
+        dropout_rate = 0.5
 
-        x1 = Embedding(4096, 128, input_length=config.strmaxlen)(input1)
-        x1 = GRU(128, return_sequences=True, dropout=0.2)(x1)
-        x1 = GRU(128, return_sequences=True, go_backwards=True, dropout=0.2)(x1)
-        x1 = GRU(128, dropout=0.2)(x1)
+        input1 = Input(shape=(config.strmaxlen,))
+
+        x1 = Embedding(2048, 128, input_length=config.strmaxlen)(input1)
+        x1 = GRU(128, return_sequences=True, dropout=dropout_rate)(x1)
+        x1 = GRU(128, return_sequences=True, go_backwards=True, dropout=dropout_rate)(x1)
+        x1 = GRU(128, dropout=dropout_rate)(x1)
         x1 = Dense(128, **acti_init)(x1)
-        x1 = AlphaDropout(0.2)(x1)
+        x1 = AlphaDropout(dropout_rate)(x1)
 
-        input2 = Input(shape=(257,))
+        input2 = Input(shape=(1 + 256 + 2048,))
+        x2 = Dense(512, **acti_init)(input2)
+        x2 = AlphaDropout(dropout_rate)(x2)
+        x2 = Dense(256, **acti_init)(input2)
+        x2 = AlphaDropout(dropout_rate)(x2)
+        x2 = Dense(128, **acti_init)(x2)
+        x2 = AlphaDropout(dropout_rate)(x2)
         
-        x = concatenate([x1, input2])
+        x = concatenate([x1, x2])
         x = Dense(256, **acti_init)(x)
-        x = AlphaDropout(0.2)(x)
+        x = AlphaDropout(dropout_rate)(x)
         x = Dense(1, activation='sigmoid')(x)
         x = Lambda(lambda x: x * 9 + 1)(x)
 
@@ -148,6 +155,7 @@ if __name__ == '__main__':
         optimizer=Adam(0.001),
         metrics=[]
     )
+    model.summary()
 
     # DONOTCHANGE: Reserved for nsml use
     bind_model(model, config)

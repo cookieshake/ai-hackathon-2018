@@ -72,7 +72,7 @@ from collections import Counter
 from functools import reduce
 
 def preprocess(data: list, max_length: int, token_list=None):
-    MAX_TOKEN = 4096
+    MAX_TOKEN = 2048
 
     # input1
 
@@ -84,8 +84,8 @@ def preprocess(data: list, max_length: int, token_list=None):
 
     token_dict = {token: i for i, token in enumerate(token_list)}
     
-    zero_padding1 = np.zeros((len(data), max_length), dtype=np.int32)
-    zero_padding2 = np.zeros((len(data), 257), dtype=np.int32)
+    zero_padding1 = np.zeros((len(data), max_length), dtype=np.uint16)
+    zero_padding2 = np.zeros((len(data), 1 + 256 + MAX_TOKEN), dtype=np.uint8)
 
     for idx, datum in enumerate(data):
         # input 1
@@ -102,9 +102,15 @@ def preprocess(data: list, max_length: int, token_list=None):
             zero_padding1[idx, :length] = np.array(temp_list)
 
         # input2
+        zero_padding2[idx, 0] = len(datum)
+
         counter = Counter(decompose_str_as_one_hot(datum, warning=False))
         for i in range(256):
-            zero_padding2[idx, i] = counter[i]
-        zero_padding2[idx, 256] = len(datum)
+            zero_padding2[idx, i + 1] = counter[i]
+
+        counter = Counter(tokens)
+        for token, count in counter.items():
+            if token in token_dict:
+                zero_padding2[idx, token_dict[token] + 257] = count
 
     return zero_padding1, zero_padding2, token_list
