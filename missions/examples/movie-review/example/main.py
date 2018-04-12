@@ -94,7 +94,7 @@ def collate_fn(data: list):
     return review, np.array(label)
 
 from keras.models import Sequential, Model, Input
-from keras.layers import Embedding, Flatten, Dense, GRU, concatenate, AlphaDropout, Lambda
+from keras.layers import Embedding, Flatten, Dense, GRU, concatenate, Dropout, Lambda, Bidirectional
 from keras.optimizers import Adam
 from keras import backend as K
 from keras.callbacks import LambdaCallback
@@ -120,31 +120,29 @@ if __name__ == '__main__':
 
     def create_model():
         acti_init = {
-            'activation': 'selu',
+            'activation': 'relu',
             'kernel_initializer': 'lecun_normal'
         }
         dropout_rate = 0.5
+        MAX_TOKEN = 4096
 
         input1 = Input(shape=(config.strmaxlen,))
 
-        x1 = Embedding(4096, 64, input_length=config.strmaxlen)(input1)
-        x1 = GRU(64, return_sequences=True, dropout=dropout_rate)(x1)
-        x1 = GRU(64, return_sequences=True, go_backwards=True, dropout=dropout_rate)(x1)
-        x1 = GRU(64, dropout=dropout_rate)(x1)
+        x1 = Embedding(MAX_TOKEN, 64, input_length=config.strmaxlen)(input1)
+        x1 = Bidirectional(GRU(64, return_sequences=True, dropout=dropout_rate))(x1)
+        x1 = Bidirectional(GRU(64, dropout=dropout_rate))(x1)
         x1 = Dense(64, **acti_init)(x1)
-        x1 = AlphaDropout(dropout_rate)(x1)
+        x1 = Dropout(dropout_rate)(x1)
 
-        input2 = Input(shape=(1 + 256 + 4096,))
-        x2 = Dense(256, **acti_init)(input2)
-        x2 = AlphaDropout(dropout_rate)(x2)
-        x2 = Dense(256, **acti_init)(input2)
-        x2 = AlphaDropout(dropout_rate)(x2)
-        x2 = Dense(64, **acti_init)(x2)
-        x2 = AlphaDropout(dropout_rate)(x2)
+        input2 = Input(shape=(1 + 256 + MAX_TOKEN,))
+        x2 = Dense(258, **acti_init)(input2)
+        x2 = Dropout(dropout_rate)(x2)
+        x2 = Dense(128, **acti_init)(input2)
+        x2 = Dropout(dropout_rate)(x2)
         
         x = concatenate([x1, x2])
         x = Dense(128, **acti_init)(x)
-        x = AlphaDropout(dropout_rate)(x)
+        x = Dropout(dropout_rate)(x)
         x = Dense(1, activation='sigmoid')(x)
         x = Lambda(lambda x: x * 9 + 1)(x)
 

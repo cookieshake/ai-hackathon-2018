@@ -67,8 +67,9 @@ class MovieReviewDataset(Dataset):
         return self.input1[idx], self.input2[idx], self.labels[idx]
 
 from kor_char_parser import create_ngram
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import reduce
+from tqdm import tqdm
 
 def preprocess(data: list, max_length: int, token_list=None):
     MAX_TOKEN = 4096
@@ -77,7 +78,7 @@ def preprocess(data: list, max_length: int, token_list=None):
 
     if not token_list:
         counter = Counter()
-        for datum in data:
+        for datum in tqdm(data, mininterval=1, bar_format='{r_bar}\n'):
             counter.update(create_ngram(datum, warning=False))
         token_list = [token for token, count in counter.most_common(MAX_TOKEN)]
 
@@ -86,31 +87,30 @@ def preprocess(data: list, max_length: int, token_list=None):
     zero_padding1 = np.zeros((len(data), max_length), dtype=np.uint16)
     zero_padding2 = np.zeros((len(data), 1 + 256 + MAX_TOKEN), dtype=np.uint8)
 
-    for idx, datum in enumerate(data):
+    idx = 0
+    for datum in tqdm(data, mininterval=1, bar_format='{r_bar}\n'):
         # input 1
-        tokens = create_ngram(datum, warning=False)
-        temp_list = list()
-        for token in tokens:
-            if token in token_dict:
-                temp_list.append(token_dict[token])
+        tokens = [token_dict[token] for token in create_ngram(datum, warning=False) if token in token_dict]
 
-        length = len(temp_list)
+        length = len(tokens)
         if length >= max_length:
-            zero_padding1[idx, :max_length] = np.array(temp_list)[:max_length]
+            zero_padding1[idx, :max_length] = np.array(tokens)[:max_length]
         else:
-            zero_padding1[idx, :length] = np.array(temp_list)
+            zero_padding1[idx, :length] = np.array(tokens)
 
         # input2
         zero_padding2[idx, 0] = len(datum)
 
         counter = Counter(decompose_str_as_one_hot(datum, warning=False))
-        for i in range(256):
-            zero_padding2[idx, i + 1] = counter[i]
-
+        counted = np.array([counter[i] for i in range(256)])
+        zero_padding2[idx, 1 : 257] = counted
+        
         counter = Counter(tokens)
-        for token, count in counter.items():
-            if token in token_dict:
-                zero_padding2[idx, token_dict[token] + 257] = count
+        for token_i, count in counter.items():
+            zero_padding2[idx, token_i + 257] = count
+
+        idx += 1
+
 
     zero_padding1 = zero_padding1.reshape(len(data), -1)
     zero_padding2 = zero_padding2.reshape(len(data), -1)

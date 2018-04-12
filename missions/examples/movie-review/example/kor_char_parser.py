@@ -20,6 +20,8 @@ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFT
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+from numba import jit
+
 cho = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"  # len = 19
 jung = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ"  # len = 21
 # len = 27
@@ -48,7 +50,6 @@ def decompose(x):
     if x >= len(cho):
         print('Unknown Exception: ', in_char, chr(in_char), x, y, z, zz)
     return cho[x] + jung[y] + zz
-
 
 def decompose_as_one_hot(in_char, warning=True):
     one_hot = []
@@ -99,7 +100,6 @@ def decompose_as_one_hot(in_char, warning=True):
 def decompose_str(string):
     return ''.join([decompose(ord(x)) for x in string])
 
-
 def decompose_str_as_one_hot(string, warning=True):
     tmp_list = []
     for x in string:
@@ -107,31 +107,26 @@ def decompose_str_as_one_hot(string, warning=True):
         tmp_list.extend(da)
     return tmp_list
 
-from konlpy.tag import Komoran
-komoran = Komoran()
-def decompose_str_with_token(string, warning=True):
-    return [token[0] for token in komoran.pos(string)]
-
-from itertools import islice
-def window(seq, n=2):
-    "Returns a sliding window (of width n) over data from the iterable"
-    "   s -> (s0,s1,...s[n-1]), (s1,s2,...,sn), ...                   "
-    it = iter(seq)
-    result = tuple(islice(it, n))
-    if len(result) == n:
-        yield ''.join(result)
-    for elem in it:
-        result = result[1:] + (elem,)
-        yield ''.join(result)
+def window(string, n=2):
+    result = list()
+    idx = 0
+    while idx + n <= len(string):
+        result.append(string[idx:idx+n])
+        idx += 1
+    return result
 
 def create_ngram(string, warning=True):
     string = string.replace(' ', '')
-    gram2 = list(window(string))
-    gram3 = list(window(string, n=3))
-    gram4 = list(window(string, n=4))
+    gram2 = window(string)
+    gram3 = window(string, n=3)
+    gram4 = window(string, n=4)
 
     gram4.extend(gram3)
     gram4.extend(gram2)
 
     return gram4
     
+if __name__ == '__main__':
+    print(create_ngram('abcdefg'))
+    print(decompose_str_as_one_hot('abcde'))
+    print(decompose_str('a'))
