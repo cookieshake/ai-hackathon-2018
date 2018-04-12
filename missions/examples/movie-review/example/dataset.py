@@ -45,7 +45,7 @@ class MovieReviewDataset(Dataset):
 
         # 영화리뷰 데이터를 읽고 preprocess까지 진행합니다
         with open(data_review, 'rt', encoding='utf-8') as f:
-            self.input1, self.input2, self.token_list = preprocess(f.readlines(), max_length)
+            self.input1, self.input2, self.input3, self.token_list = preprocess(f.readlines(), max_length)
         
         # 영화리뷰 레이블을 읽고 preprocess까지 진행합니다.
         with open(data_label) as f:
@@ -86,12 +86,14 @@ def preprocess(data: list, max_length: int, token_list=None):
     
     zero_padding1 = np.zeros((len(data), max_length), dtype=np.uint16)
     zero_padding2 = np.zeros((len(data), 1 + 256 + MAX_TOKEN), dtype=np.uint8)
+    zero_padding3 = np.zeros((len(data), max_length * 2), dtype=np.uint16)
 
     idx = 0
     for datum in tqdm(data, mininterval=1, bar_format='{r_bar}\n'):
-        # input 1
         tokens = [token_dict[token] for token in create_ngram(datum, warning=False) if token in token_dict]
+        one_hot = decompose_str_as_one_hot(datum, warning=False)
 
+        # input 1
         length = len(tokens)
         if length >= max_length:
             zero_padding1[idx, :max_length] = np.array(tokens)[:max_length]
@@ -101,7 +103,7 @@ def preprocess(data: list, max_length: int, token_list=None):
         # input2
         zero_padding2[idx, 0] = len(datum)
 
-        counter = Counter(decompose_str_as_one_hot(datum, warning=False))
+        counter = Counter(one_hot)
         counted = np.array([counter[i] for i in range(256)])
         zero_padding2[idx, 1 : 257] = counted
         
@@ -109,10 +111,19 @@ def preprocess(data: list, max_length: int, token_list=None):
         for token_i, count in counter.items():
             zero_padding2[idx, token_i + 257] = count
 
+        # input3
+        length = len(one_hot)
+        if length >= max_length * 2:
+            zero_padding3[idx, :max_length * 2] = np.array(one_hot[:max_length * 2])
+        else:
+            zero_padding3[idx, :length] = np.array(one_hot)
+
+
         idx += 1
 
 
     zero_padding1 = zero_padding1.reshape(len(data), -1)
     zero_padding2 = zero_padding2.reshape(len(data), -1)
+    zero_padding3 = zero_padding3.reshape(len(data), -1)
 
-    return zero_padding1, zero_padding2, token_list
+    return zero_padding1, zero_padding2, zero_padding3, token_list

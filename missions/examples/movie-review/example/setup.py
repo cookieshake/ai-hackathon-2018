@@ -26,6 +26,6 @@ setup(
     version='1.0',
     description='',
     install_requires=[
-        'torch', 'torchvision', 'numba'
+        'torch', 'torchvision', 'numba', 'konlpy', 'jpype1'
     ]
 )
