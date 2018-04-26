@@ -125,7 +125,7 @@ def create_ngram(string, warning=True):
     gram4.extend(gram2)
 
     return gram4
-    
+
 if __name__ == '__main__':
     print(create_ngram('abcdefg'))
     print(decompose_str_as_one_hot('abcde'))

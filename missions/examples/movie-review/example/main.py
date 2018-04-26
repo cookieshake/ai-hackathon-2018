@@ -34,23 +34,23 @@ from nsml import DATASET_PATH, HAS_DATASET, GPU_NUM, IS_ON_NSML
 import pickle
 
 
-token_list = None
+save_data = None
 # DONOTCHANGE: They are reserved for nsml
 # This is for nsml leaderboard
 def bind_model(model, config):
     # 학습한 모델을 저장하는 함수입니다.
     def save(filename, *args):
-        global token_list
+        global save_data
         os.makedirs(filename, exist_ok=True)
         model.save_weights(os.path.join(filename, 'model'))
-        pickle.dump(token_list, open(os.path.join(filename, 'token_list'), 'wb'))
+        pickle.dump(save_data, open(os.path.join(filename, 'save_data'), 'wb'))
 
     # 저장한 모델을 불러올 수 있는 함수입니다.
     def load(filename, *args):
-        global token_list
+        global save_data
 
         model.load_weights(os.path.join(filename, 'model'))
-        token_list = pickle.load(open(os.path.join(filename, 'token_list'), 'rb'))
+        save_data = pickle.load(open(os.path.join(filename, 'save_data'), 'rb'))
 
         print('Model loaded')
 
@@ -62,11 +62,11 @@ def bind_model(model, config):
         :return:
         """
         # dataset.py에서 작성한 preprocess 함수를 호출하여, 문자열을 벡터로 변환합니다
-        global token_list
-        input1, input2, input3, _ = preprocess(raw_data, config.strmaxlen, token_list=token_list or 1)
+        global save_data
+        input1, input2, _ = preprocess(raw_data, config.strmaxlen, save_data=save_data or 1)
 
         # 저장한 모델에 입력값을 넣고 prediction 결과를 리턴받습니다
-        output_prediction = model.predict([input1, input2, input3])
+        output_prediction = model.predict([input1, input2])
         point = output_prediction.flatten().tolist()
         # DONOTCHANGE: They are reserved for nsml
         # 리턴 결과는 [(confidence interval, 포인트)] 의 형태로 보내야만 리더보드에 올릴 수 있습니다. 리더보드 결과에 confidence interval의 값은 영향을 미치지 않습니다
@@ -94,7 +94,7 @@ def collate_fn(data: list):
     return review, np.array(label)
 
 from keras.models import Sequential, Model, Input
-from keras.layers import Embedding, Flatten, Dense, GRU, concatenate, Dropout, Lambda, Bidirectional
+from keras.layers import Embedding, Flatten, Dense, GRU, concatenate, Dropout, Lambda, Bidirectional, Flatten
 from keras.optimizers import Adam
 from keras import backend as K
 from keras.callbacks import LambdaCallback
@@ -124,42 +124,34 @@ if __name__ == '__main__':
             'kernel_initializer': 'lecun_normal'
         }
         dropout_rate = 0.5
-        MAX_TOKEN = 4096
+        MAX_TOKEN = 1024
 
         input1 = Input(shape=(config.strmaxlen,))
 
-        x1 = Embedding(MAX_TOKEN, 64, input_length=config.strmaxlen)(input1)
-        x1 = Bidirectional(GRU(64, return_sequences=True, dropout=dropout_rate))(x1)
-        x1, _, _ = Bidirectional(GRU(64, dropout=dropout_rate, return_state=True))(x1)
-        x1 = Dense(64, **acti_init)(x1)
+        x1 = Embedding(250, 256, input_length=config.strmaxlen)(input1)
+        x1 = Bidirectional(GRU(200, return_sequences=True, dropout=dropout_rate))(x1)
+        x1 = Bidirectional(GRU(200, return_sequences=True, return_state=True, dropout=dropout_rate))(x1)[0]
+        x1 = Flatten()(x1)
+        x1 = Dense(200, **acti_init)(x1)
         x1 = Dropout(dropout_rate)(x1)
+        
+        input2 = Input(shape=(1 + 250,))
 
-        input2 = Input(shape=(1 + 256 + MAX_TOKEN,))
-        x2 = Dense(258, **acti_init)(input2)
-        x2 = Dropout(dropout_rate)(x2)
         x2 = Dense(128, **acti_init)(input2)
         x2 = Dropout(dropout_rate)(x2)
 
-        input3 = Input(shape=(config.strmaxlen * 2,))
-
-        x3 = Embedding(256, 64, input_length=config.strmaxlen * 2)(input3)
-        x3 = Bidirectional(GRU(64, return_sequences=True, dropout=dropout_rate))(x3)
-        x3, _, _ = Bidirectional(GRU(64, dropout=dropout_rate, return_state=True))(x3)
-        x3 = Dense(64, **acti_init)(x3)
-        x3 = Dropout(dropout_rate)(x3)
-
-        x = concatenate([x1, x2, x3])
-        x = Dense(128, **acti_init)(x)
+        x = concatenate([x1, x2])
+        x = Dense(10, **acti_init)(x)
         x = Dropout(dropout_rate)(x)
         x = Dense(1, activation='sigmoid')(x)
         x = Lambda(lambda x: x * 11)(x)
 
-        return Model(inputs=[input1, input2, input3], outputs=x)
+        return Model(inputs=[input1, input2], outputs=x)
 
     model = create_model()
     model.compile(
         loss='mse',
-        optimizer=Adam(0.0003),
+        optimizer=Adam(),
         metrics=[]
     )
     model.summary()
@@ -177,7 +169,7 @@ if __name__ == '__main__':
         # 데이터를 로드합니다.
         print("Now Loading Dataset...")
         dataset = MovieReviewDataset(DATASET_PATH, config.strmaxlen)
-        token_list = dataset.token_list
+        save_data = dataset.save_data
         print("Loading Dataset Done")
 
         batches_per_epoch = int(len(dataset.labels) / config.batch) + 1
@@ -197,13 +189,13 @@ if __name__ == '__main__':
 
         callback = LambdaCallback(on_epoch_end=on_epoch_end, on_batch_end=on_batch_end)
         model.fit(
-            x=[dataset.input1, dataset.input2, dataset.input3],
+            x=[dataset.input1, dataset.input2],
             y=dataset.labels, 
             batch_size=config.batch,
             epochs=config.epochs,
             verbose=2,
             callbacks=[callback],
-            validation_split=0.1,
+            validation_split=0.05,
             shuffle=True,
         )
 
